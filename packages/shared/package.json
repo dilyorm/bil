@@ -1,0 +1,23 @@
+{
+  "name": "@bil/shared",
+  "version": "1.0.0",
+  "description": "Shared types and utilities for BIL Core System",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rimraf dist",
+    "lint": "eslint src --ext .ts",
+    "lint:fix": "eslint src --ext .ts --fix",
+    "test": "vitest --run"
+  },
+  "dependencies": {
+    "zod": "^3.21.4"
+  },
+  "devDependencies": {
+    "rimraf": "^5.0.1",
+    "typescript": "^5.1.6",
+    "vitest": "^0.34.0"
+  }
+}

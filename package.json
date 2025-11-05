@@ -1,0 +1,55 @@
+{
+  "name": "bil-core-system",
+  "version": "1.0.0",
+  "description": "BIL (Biological Intelligence Layer) Core System - Personal AI Assistant Ecosystem",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:mobile\" \"npm run dev:desktop\"",
+    "dev:backend": "npm run dev --workspace=@bil/backend",
+    "dev:mobile": "npm run dev --workspace=@bil/mobile",
+    "dev:desktop": "npm run dev --workspace=@bil/desktop",
+    "build": "npm run build --workspaces",
+    "build:backend": "npm run build --workspace=@bil/backend",
+    "build:mobile": "npm run build --workspace=@bil/mobile",
+    "build:desktop": "npm run build --workspace=@bil/desktop",
+    "test": "npm run test --workspaces",
+    "test:backend": "npm run test --workspace=@bil/backend",
+    "test:mobile": "npm run test --workspace=@bil/mobile",
+    "test:desktop": "npm run test --workspace=@bil/desktop",
+    "lint": "npm run lint --workspaces",
+    "lint:fix": "npm run lint:fix --workspaces",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "clean": "npm run clean --workspaces && rimraf node_modules",
+    "postinstall": "husky install"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "concurrently": "^8.2.0",
+    "eslint": "^8.45.0",
+    "eslint-config-prettier": "^8.8.0",
+    "eslint-plugin-prettier": "^5.0.0",
+    "husky": "^8.0.3",
+    "lint-staged": "^13.2.3",
+    "prettier": "^3.0.0",
+    "rimraf": "^5.0.1",
+    "typescript": "^5.1.6"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md}": [
+      "prettier --write"
+    ]
+  }
+}
