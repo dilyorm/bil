@@ -1,4 +1,4 @@
-# BIL - Biological Intelligence Layer
+# BIL
 
 > A multi-platform AI assistant system with desktop control, mobile app, and wearable device support.
 
