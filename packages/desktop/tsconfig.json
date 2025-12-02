@@ -13,7 +13,5 @@
   },
   "include": ["src/**/*"],
   "exclude": ["dist", "build", "node_modules"],
-  "references": [
-    { "path": "../shared" }
-  ]
+  "references": [{ "path": "../shared" }]
 }

@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bil-config
+  namespace: bil-production
+data:
+  NODE_ENV: "production"
+  PORT: "3000"
+  JWT_EXPIRES_IN: "1h"
+  JWT_REFRESH_EXPIRES_IN: "7d"
+  CORS_ORIGIN: "https://app.bil.com,https://bil.com"
+  
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: bil-secrets
+  namespace: bil-production
+type: Opaque
+stringData:
+  DATABASE_URL: "postgresql://bil_user:CHANGE_ME@postgres-service:5432/bil_production"
+  REDIS_URL: "redis://redis-service:6379"
+  JWT_SECRET: "CHANGE_ME_PRODUCTION_JWT_SECRET_32_CHARS_MIN"
+  JWT_REFRESH_SECRET: "CHANGE_ME_PRODUCTION_REFRESH_SECRET_32_CHARS_MIN"
+  OPENAI_API_KEY: "CHANGE_ME"
+  WHISPER_API_KEY: "CHANGE_ME"
+  ELEVENLABS_API_KEY: "CHANGE_ME"
+  POSTGRES_PASSWORD: "CHANGE_ME"
+  POSTGRES_REPLICATION_PASSWORD: "CHANGE_ME"

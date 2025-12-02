@@ -2,63 +2,141 @@
   "name": "@bil/desktop",
   "version": "1.0.0",
   "description": "BIL Core System Desktop Application",
-  "main": "dist/main.js",
+  "author": "BIL Technologies",
+  "main": "dist/electron/main.js",
   "homepage": "./",
   "scripts": {
     "dev": "concurrently \"npm run dev:electron\" \"npm run dev:react\"",
-    "dev:electron": "electron dist/main.js",
+    "dev:electron": "electron dist/electron/main.js",
     "dev:react": "vite",
     "build": "npm run build:react && npm run build:electron",
     "build:react": "vite build",
     "build:electron": "tsc -p tsconfig.electron.json",
     "package": "electron-builder",
-    "package:win": "electron-builder --win",
+    "package:win": "cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win --config.win.target=portable",
+    "package:win:nsis": "cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win --config.win.target=nsis",
     "package:mac": "electron-builder --mac",
     "package:linux": "electron-builder --linux",
     "clean": "rimraf dist build",
-    "lint": "eslint src --ext .ts,.tsx",
-    "lint:fix": "eslint src --ext .ts,.tsx --fix",
+    "lint": "cross-env ESLINT_USE_FLAT_CONFIG=false eslint src --ext .ts,.tsx",
+    "lint:fix": "cross-env ESLINT_USE_FLAT_CONFIG=false eslint src --ext .ts,.tsx --fix",
     "test": "vitest --run",
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@bil/shared": "workspace:*",
+    "@bil/shared": "file:../shared",
+    "axios": "^1.4.0",
+    "electron-updater": "^6.1.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
+    "react-router-dom": "^6.14.2",
     "socket.io-client": "^4.7.2",
-    "electron-updater": "^6.1.1"
+    "styled-components": "^6.0.7"
   },
   "devDependencies": {
+    "@types/node": "^20.4.5",
     "@types/react": "^18.2.15",
     "@types/react-dom": "^18.2.7",
-    "@types/node": "^20.4.5",
+    "@types/styled-components": "^5.1.26",
     "@vitejs/plugin-react": "^4.0.3",
+    "concurrently": "^8.2.0",
+    "cross-env": "^7.0.3",
     "electron": "^25.3.1",
     "electron-builder": "^24.6.3",
-    "concurrently": "^8.2.0",
-    "vite": "^4.4.5",
     "rimraf": "^5.0.1",
     "typescript": "^5.1.6",
+    "vite": "^4.4.5",
     "vitest": "^0.34.0"
   },
   "build": {
     "appId": "com.bil.desktop",
     "productName": "BIL Assistant",
+    "electronVersion": "25.3.1",
     "directories": {
-      "output": "release"
+      "output": "release",
+      "buildResources": "assets"
     },
     "files": [
       "dist/**/*",
-      "build/**/*"
+      "build/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "assets/",
+        "to": "assets/",
+        "filter": [
+          "**/*"
+        ]
+      }
     ],
     "mac": {
-      "category": "public.app-category.productivity"
+      "category": "public.app-category.productivity",
+      "icon": "assets/icon.icns",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "assets/entitlements.mac.plist",
+      "entitlementsInherit": "assets/entitlements.mac.plist",
+      "notarize": {
+        "teamId": "${APPLE_TEAM_ID}"
+      }
     },
     "win": {
-      "target": "nsis"
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "publisherName": "BIL Technologies",
+      "requestedExecutionLevel": "asInvoker",
+      "artifactName": "${productName}-${version}-${arch}.${ext}",
+      "sign": null,
+      "signingHashAlgorithms": null,
+      "verifyUpdateCodeSignature": false
     },
     "linux": {
-      "target": "AppImage"
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.png",
+      "category": "Office"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "allowElevation": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "deleteAppDataOnUninstall": false,
+      "runAfterFinish": true,
+      "menuCategory": false,
+      "shortcutName": "BIL Assistant"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "bil-technologies",
+      "repo": "bil-desktop"
     }
   }
 }

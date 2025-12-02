@@ -4,12 +4,21 @@
     "strict": true,
     "baseUrl": ".",
     "paths": {
-      "@bil/shared": ["../shared/src"],
-      "@bil/shared/*": ["../shared/src/*"]
+      "@bil/shared": [
+        "../shared/src"
+      ],
+      "@bil/shared/*": [
+        "../shared/src/*"
+      ]
     }
   },
-  "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts"],
+  "include": [
+    "**/*.ts",
+    "**/*.tsx"
+  ],
   "references": [
-    { "path": "../shared" }
+    {
+      "path": "../shared"
+    }
   ]
 }

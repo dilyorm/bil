@@ -1,0 +1,7 @@
+# Assets directory for desktop application
+# This directory should contain:
+# - icon.png (256x256 PNG for Linux)
+# - icon.ico (Windows icon file)
+# - icon.icns (macOS icon file)
+# - tray-icon.png (16x16 or 32x32 PNG for system tray)
+# - entitlements.mac.plist (macOS entitlements for signing)

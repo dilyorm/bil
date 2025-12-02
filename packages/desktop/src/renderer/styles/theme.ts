@@ -1,0 +1,63 @@
+export const theme = {
+  colors: {
+    primary: '#007AFF',
+    primaryHover: '#0056CC',
+    secondary: '#5856D6',
+    background: '#FFFFFF',
+    backgroundSecondary: '#F2F2F7',
+    backgroundTertiary: '#FFFFFF',
+    surface: '#FFFFFF',
+    surfaceHover: '#F2F2F7',
+    text: '#000000',
+    textSecondary: '#8E8E93',
+    textTertiary: '#C7C7CC',
+    border: '#C6C6C8',
+    borderLight: '#E5E5EA',
+    success: '#34C759',
+    warning: '#FF9500',
+    error: '#FF3B30',
+    shadow: 'rgba(0, 0, 0, 0.1)',
+  },
+  spacing: {
+    xs: '4px',
+    sm: '8px',
+    md: '16px',
+    lg: '24px',
+    xl: '32px',
+    xxl: '48px',
+  },
+  borderRadius: {
+    sm: '4px',
+    md: '8px',
+    lg: '12px',
+    xl: '16px',
+    full: '50%',
+  },
+  fontSize: {
+    xs: '12px',
+    sm: '14px',
+    md: '16px',
+    lg: '18px',
+    xl: '20px',
+    xxl: '24px',
+  },
+  fontWeight: {
+    normal: 400,
+    medium: 500,
+    semibold: 600,
+    bold: 700,
+  },
+  shadows: {
+    sm: '0 1px 3px rgba(0, 0, 0, 0.1)',
+    md: '0 4px 6px rgba(0, 0, 0, 0.1)',
+    lg: '0 10px 15px rgba(0, 0, 0, 0.1)',
+    xl: '0 20px 25px rgba(0, 0, 0, 0.1)',
+  },
+  transitions: {
+    fast: '0.15s ease-in-out',
+    normal: '0.2s ease-in-out',
+    slow: '0.3s ease-in-out',
+  },
+};
+
+export type Theme = typeof theme;

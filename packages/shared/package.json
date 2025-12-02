@@ -8,8 +8,8 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "clean": "rimraf dist",
-    "lint": "eslint src --ext .ts",
-    "lint:fix": "eslint src --ext .ts --fix",
+    "lint": "cross-env ESLINT_USE_FLAT_CONFIG=false eslint src --ext .ts",
+    "lint:fix": "cross-env ESLINT_USE_FLAT_CONFIG=false eslint src --ext .ts --fix",
     "test": "vitest --run"
   },
   "dependencies": {

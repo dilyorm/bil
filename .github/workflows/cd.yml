@@ -1,0 +1,203 @@
+name: Continuous Deployment
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+        - staging
+        - production
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # Deploy to Staging
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging')
+    environment: staging
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ secrets.AWS_REGION }}
+
+    - name: Update kubeconfig
+      run: |
+        aws eks update-kubeconfig --region ${{ secrets.AWS_REGION }} --name bil-staging
+
+    - name: Deploy to staging
+      run: |
+        # Update image tags in Kubernetes manifests
+        sed -i "s|bil/backend:latest|${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:${{ github.sha }}|g" infrastructure/k8s/bil-api.yaml
+        
+        # Apply Kubernetes manifests
+        kubectl apply -f infrastructure/k8s/namespace.yaml
+        kubectl apply -f infrastructure/k8s/configmap.yaml
+        kubectl apply -f infrastructure/k8s/postgres.yaml
+        kubectl apply -f infrastructure/k8s/redis.yaml
+        kubectl apply -f infrastructure/k8s/bil-api.yaml
+        
+        # Wait for deployment to complete
+        kubectl rollout status deployment/bil-api -n bil-staging --timeout=600s
+
+    - name: Run smoke tests
+      run: |
+        # Wait for service to be ready
+        kubectl wait --for=condition=ready pod -l app=bil-api -n bil-staging --timeout=300s
+        
+        # Get service endpoint
+        ENDPOINT=$(kubectl get service bil-api-service -n bil-staging -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+        
+        # Run basic health check
+        curl -f http://$ENDPOINT/health || exit 1
+
+    - name: Notify deployment status
+      uses: 8398a7/action-slack@v3
+      if: always()
+      with:
+        status: ${{ job.status }}
+        channel: '#deployments'
+        webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+        fields: repo,message,commit,author,action,eventName,ref,workflow
+
+  # Deploy to Production
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production'
+    environment: production
+    needs: deploy-staging
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_PROD }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_PROD }}
+        aws-region: ${{ secrets.AWS_REGION }}
+
+    - name: Update kubeconfig
+      run: |
+        aws eks update-kubeconfig --region ${{ secrets.AWS_REGION }} --name bil-production
+
+    - name: Blue-Green Deployment
+      run: |
+        # Create new deployment with green suffix
+        sed -i "s|bil/backend:latest|${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:${{ github.sha }}|g" infrastructure/k8s/bil-api.yaml
+        sed -i "s|name: bil-api|name: bil-api-green|g" infrastructure/k8s/bil-api.yaml
+        sed -i "s|app: bil-api|app: bil-api-green|g" infrastructure/k8s/bil-api.yaml
+        
+        # Deploy green version
+        kubectl apply -f infrastructure/k8s/bil-api.yaml
+        
+        # Wait for green deployment to be ready
+        kubectl rollout status deployment/bil-api-green -n bil-production --timeout=600s
+        
+        # Run health checks on green deployment
+        kubectl wait --for=condition=ready pod -l app=bil-api-green -n bil-production --timeout=300s
+        
+        # Switch traffic to green deployment
+        kubectl patch service bil-api-service -n bil-production -p '{"spec":{"selector":{"app":"bil-api-green"}}}'
+        
+        # Wait for traffic switch
+        sleep 30
+        
+        # Verify production health
+        ENDPOINT=$(kubectl get service bil-api-service -n bil-production -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+        curl -f https://$ENDPOINT/health || exit 1
+        
+        # Clean up old blue deployment
+        kubectl delete deployment bil-api -n bil-production --ignore-not-found=true
+        
+        # Rename green to blue for next deployment
+        kubectl patch deployment bil-api-green -n bil-production -p '{"metadata":{"name":"bil-api"}}'
+        kubectl patch deployment bil-api-green -n bil-production -p '{"spec":{"selector":{"matchLabels":{"app":"bil-api"}}}}'
+        kubectl patch deployment bil-api-green -n bil-production -p '{"spec":{"template":{"metadata":{"labels":{"app":"bil-api"}}}}}'
+
+    - name: Run production smoke tests
+      run: |
+        # Comprehensive health checks
+        ENDPOINT=$(kubectl get service bil-api-service -n bil-production -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+        
+        # Health check
+        curl -f https://$ENDPOINT/health
+        
+        # Database connectivity check
+        curl -f https://$ENDPOINT/health/db
+        
+        # Redis connectivity check
+        curl -f https://$ENDPOINT/health/redis
+
+    - name: Notify production deployment
+      uses: 8398a7/action-slack@v3
+      if: always()
+      with:
+        status: ${{ job.status }}
+        channel: '#production-deployments'
+        webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+        fields: repo,message,commit,author,action,eventName,ref,workflow
+
+  # Database Migration
+  migrate-database:
+    name: Database Migration
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_PROD }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_PROD }}
+        aws-region: ${{ secrets.AWS_REGION }}
+
+    - name: Get database credentials
+      run: |
+        DB_SECRET=$(aws secretsmanager get-secret-value --secret-id bil-production/database/password --query SecretString --output text)
+        echo "DATABASE_URL=$(echo $DB_SECRET | jq -r '.host + ":" + (.port|tostring) + "/" + .dbname')" >> $GITHUB_ENV
+        echo "DB_USER=$(echo $DB_SECRET | jq -r '.username')" >> $GITHUB_ENV
+        echo "DB_PASS=$(echo $DB_SECRET | jq -r '.password')" >> $GITHUB_ENV
+
+    - name: Run database migrations
+      run: |
+        export DATABASE_URL="postgresql://$DB_USER:$DB_PASS@$DATABASE_URL"
+        npm run migrate --workspace=packages/backend
+      env:
+        NODE_ENV: production
+
+    - name: Verify migration
+      run: |
+        export DATABASE_URL="postgresql://$DB_USER:$DB_PASS@$DATABASE_URL"
+        npm run migrate:status --workspace=packages/backend

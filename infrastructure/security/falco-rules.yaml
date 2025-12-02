@@ -1,0 +1,227 @@
+# Falco Security Rules for BIL System
+# Runtime security monitoring and threat detection
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: falco-rules
+  namespace: falco-system
+data:
+  bil_rules.yaml: |
+    # BIL-specific security rules
+    
+    - rule: BIL Unauthorized File Access
+      desc: Detect unauthorized file access in BIL containers
+      condition: >
+        spawned_process and
+        container.image.repository contains "bil" and
+        (proc.name in (cat, less, more, head, tail) and
+         fd.name contains "/etc/passwd" or
+         fd.name contains "/etc/shadow" or
+         fd.name contains "/etc/hosts" or
+         fd.name contains "/root/")
+      output: >
+        Unauthorized file access in BIL container
+        (user=%user.name command=%proc.cmdline file=%fd.name
+         container_id=%container.id image=%container.image.repository)
+      priority: WARNING
+      tags: [filesystem, bil]
+
+    - rule: BIL Suspicious Network Activity
+      desc: Detect suspicious network connections from BIL containers
+      condition: >
+        inbound_outbound and
+        container.image.repository contains "bil" and
+        ((fd.sport in (22, 23, 21, 135, 139, 445, 1433, 3389)) or
+         (fd.dport in (22, 23, 21, 135, 139, 445, 1433, 3389)))
+      output: >
+        Suspicious network activity from BIL container
+        (user=%user.name command=%proc.cmdline connection=%fd.name
+         container_id=%container.id image=%container.image.repository)
+      priority: WARNING
+      tags: [network, bil]
+
+    - rule: BIL Container Privilege Escalation
+      desc: Detect privilege escalation attempts in BIL containers
+      condition: >
+        spawned_process and
+        container.image.repository contains "bil" and
+        (proc.name in (sudo, su, doas) or
+         proc.cmdline contains "chmod +s" or
+         proc.cmdline contains "setuid")
+      output: >
+        Privilege escalation attempt in BIL container
+        (user=%user.name command=%proc.cmdline
+         container_id=%container.id image=%container.image.repository)
+      priority: CRITICAL
+      tags: [privilege_escalation, bil]
+
+    - rule: BIL Database Connection Anomaly
+      desc: Detect unusual database connections from BIL containers
+      condition: >
+        spawned_process and
+        container.image.repository contains "bil" and
+        (proc.name in (psql, mysql, mongo, redis-cli) and
+         not proc.cmdline contains "localhost" and
+         not proc.cmdline contains "127.0.0.1" and
+         not proc.cmdline contains "postgres-service" and
+         not proc.cmdline contains "redis-service")
+      output: >
+        Unusual database connection from BIL container
+        (user=%user.name command=%proc.cmdline
+         container_id=%container.id image=%container.image.repository)
+      priority: WARNING
+      tags: [database, bil]
+
+    - rule: BIL Crypto Mining Activity
+      desc: Detect potential crypto mining in BIL containers
+      condition: >
+        spawned_process and
+        container.image.repository contains "bil" and
+        (proc.name in (xmrig, cpuminer, cgminer, bfgminer) or
+         proc.cmdline contains "stratum" or
+         proc.cmdline contains "mining" or
+         proc.cmdline contains "hashrate")
+      output: >
+        Potential crypto mining activity in BIL container
+        (user=%user.name command=%proc.cmdline
+         container_id=%container.id image=%container.image.repository)
+      priority: CRITICAL
+      tags: [malware, bil]
+
+    - rule: BIL Reverse Shell Activity
+      desc: Detect reverse shell attempts from BIL containers
+      condition: >
+        spawned_process and
+        container.image.repository contains "bil" and
+        ((proc.name in (nc, ncat, netcat, socat) and
+          (proc.cmdline contains "-e" or proc.cmdline contains "-c" or proc.cmdline contains "/bin/sh")) or
+         (proc.name in (bash, sh) and proc.cmdline contains "/dev/tcp/"))
+      output: >
+        Reverse shell attempt from BIL container
+        (user=%user.name command=%proc.cmdline
+         container_id=%container.id image=%container.image.repository)
+      priority: CRITICAL
+      tags: [shell, bil]
+
+    - rule: BIL Sensitive File Modification
+      desc: Detect modification of sensitive files in BIL containers
+      condition: >
+        open_write and
+        container.image.repository contains "bil" and
+        (fd.name in (/etc/passwd, /etc/shadow, /etc/sudoers, /etc/ssh/sshd_config) or
+         fd.name startswith /root/.ssh/ or
+         fd.name startswith /home/*/.ssh/)
+      output: >
+        Sensitive file modification in BIL container
+        (user=%user.name file=%fd.name command=%proc.cmdline
+         container_id=%container.id image=%container.image.repository)
+      priority: CRITICAL
+      tags: [filesystem, bil]
+
+    - rule: BIL Package Manager Usage
+      desc: Detect package manager usage in BIL containers (potential supply chain attack)
+      condition: >
+        spawned_process and
+        container.image.repository contains "bil" and
+        proc.name in (apt, apt-get, yum, dnf, apk, pip, npm, yarn, gem)
+      output: >
+        Package manager usage in BIL container
+        (user=%user.name command=%proc.cmdline
+         container_id=%container.id image=%container.image.repository)
+      priority: WARNING
+      tags: [package_management, bil]
+
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: falco
+  namespace: falco-system
+  labels:
+    app: falco
+spec:
+  selector:
+    matchLabels:
+      app: falco
+  template:
+    metadata:
+      labels:
+        app: falco
+    spec:
+      serviceAccountName: falco
+      hostNetwork: true
+      hostPID: true
+      containers:
+      - name: falco
+        image: falcosecurity/falco:0.36.2
+        args:
+        - /usr/bin/falco
+        - --cri
+        - /host/run/containerd/containerd.sock
+        - --k8s-api
+        - --k8s-api-cert
+        - /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        - --k8s-api-token
+        - /var/run/secrets/kubernetes.io/serviceaccount/token
+        - --rule
+        - /etc/falco/rules.d/bil_rules.yaml
+        securityContext:
+          privileged: true
+        volumeMounts:
+        - mountPath: /host/var/run/docker.sock
+          name: docker-socket
+        - mountPath: /host/run/containerd/containerd.sock
+          name: containerd-socket
+        - mountPath: /host/dev
+          name: dev-fs
+        - mountPath: /host/proc
+          name: proc-fs
+          readOnly: true
+        - mountPath: /host/boot
+          name: boot-fs
+          readOnly: true
+        - mountPath: /host/lib/modules
+          name: lib-modules
+          readOnly: true
+        - mountPath: /host/usr
+          name: usr-fs
+          readOnly: true
+        - mountPath: /host/etc
+          name: etc-fs
+          readOnly: true
+        - mountPath: /etc/falco/rules.d
+          name: falco-rules
+        env:
+        - name: FALCO_K8S_NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+      volumes:
+      - name: docker-socket
+        hostPath:
+          path: /var/run/docker.sock
+      - name: containerd-socket
+        hostPath:
+          path: /run/containerd/containerd.sock
+      - name: dev-fs
+        hostPath:
+          path: /dev
+      - name: proc-fs
+        hostPath:
+          path: /proc
+      - name: boot-fs
+        hostPath:
+          path: /boot
+      - name: lib-modules
+        hostPath:
+          path: /lib/modules
+      - name: usr-fs
+        hostPath:
+          path: /usr
+      - name: etc-fs
+        hostPath:
+          path: /etc
+      - name: falco-rules
+        configMap:
+          name: falco-rules

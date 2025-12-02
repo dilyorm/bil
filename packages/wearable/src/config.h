@@ -1,0 +1,54 @@
+#ifndef CONFIG_H
+#define CONFIG_H
+
+// Device Information
+#define DEVICE_NAME "BIL-Wearable"
+#define DEVICE_VERSION "1.0.0"
+#define MANUFACTURER_NAME "BIL Systems"
+
+// Hardware Pin Definitions
+#define LED_PIN 2
+#define BUTTON_PIN 0
+#define MIC_PIN 34
+#define HAPTIC_SDA_PIN 21
+#define HAPTIC_SCL_PIN 22
+#define ACCEL_SDA_PIN 21
+#define ACCEL_SCL_PIN 22
+
+// BLE Configuration
+#define BLE_SERVICE_UUID "12345678-1234-1234-1234-123456789abc"
+#define BLE_AUDIO_CHARACTERISTIC_UUID "12345678-1234-1234-1234-123456789abd"
+#define BLE_COMMAND_CHARACTERISTIC_UUID "12345678-1234-1234-1234-123456789abe"
+#define BLE_STATUS_CHARACTERISTIC_UUID "12345678-1234-1234-1234-123456789abf"
+
+// Voice Detection Configuration
+#define WAKE_WORD "Hey BIL"
+#define VOICE_THRESHOLD 1000
+#define RECORDING_DURATION_MS 5000
+#define SAMPLE_RATE 16000
+#define SAMPLE_BUFFER_SIZE 512
+
+// Haptic Feedback Configuration
+#define HAPTIC_I2C_ADDRESS 0x5A
+#define HAPTIC_STARTUP_EFFECT 1
+#define HAPTIC_CONFIRMATION_EFFECT 10
+#define HAPTIC_ERROR_EFFECT 58
+#define HAPTIC_CLICK_EFFECT 14
+#define HAPTIC_DOUBLE_CLICK_EFFECT 15
+#define HAPTIC_LONG_PRESS_EFFECT 47
+
+// Gesture Detection Configuration
+#define GESTURE_THRESHOLD 2.0
+#define GESTURE_TIMEOUT_MS 1000
+#define ACCEL_I2C_ADDRESS 0x19
+
+// Power Management
+#define SLEEP_TIMEOUT_MS 300000  // 5 minutes
+#define LOW_BATTERY_THRESHOLD 3.3
+#define BATTERY_PIN 35
+
+// Debug Configuration
+#define DEBUG_ENABLED true
+#define SERIAL_BAUD_RATE 115200
+
+#endif // CONFIG_H

@@ -1,0 +1,271 @@
+name: Monitoring and Alerting
+
+on:
+  schedule:
+    # Run every 5 minutes
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+env:
+  SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+
+jobs:
+  # Health Check Monitoring
+  health-check:
+    name: Health Check Monitoring
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        environment: [staging, production]
+        endpoint: [health, health/db, health/redis]
+    
+    steps:
+    - name: Health Check
+      id: health
+      run: |
+        if [ "${{ matrix.environment }}" == "production" ]; then
+          URL="https://api.bil.com/${{ matrix.endpoint }}"
+        else
+          URL="https://staging-api.bil.com/${{ matrix.endpoint }}"
+        fi
+        
+        RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" "$URL" || echo "000")
+        
+        if [ "$RESPONSE" != "200" ]; then
+          echo "status=failed" >> $GITHUB_OUTPUT
+          echo "response_code=$RESPONSE" >> $GITHUB_OUTPUT
+          echo "url=$URL" >> $GITHUB_OUTPUT
+        else
+          echo "status=success" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Alert on Failure
+      if: steps.health.outputs.status == 'failed'
+      uses: 8398a7/action-slack@v3
+      with:
+        status: failure
+        channel: '#alerts'
+        webhook_url: ${{ env.SLACK_WEBHOOK }}
+        custom_payload: |
+          {
+            "text": "🚨 Health Check Failed",
+            "attachments": [
+              {
+                "color": "danger",
+                "fields": [
+                  {
+                    "title": "Environment",
+                    "value": "${{ matrix.environment }}",
+                    "short": true
+                  },
+                  {
+                    "title": "Endpoint",
+                    "value": "${{ matrix.endpoint }}",
+                    "short": true
+                  },
+                  {
+                    "title": "Response Code",
+                    "value": "${{ steps.health.outputs.response_code }}",
+                    "short": true
+                  },
+                  {
+                    "title": "URL",
+                    "value": "${{ steps.health.outputs.url }}",
+                    "short": false
+                  }
+                ]
+              }
+            ]
+          }
+
+  # Performance Monitoring
+  performance-check:
+    name: Performance Monitoring
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        environment: [staging, production]
+    
+    steps:
+    - name: Performance Test
+      id: perf
+      run: |
+        if [ "${{ matrix.environment }}" == "production" ]; then
+          URL="https://api.bil.com"
+        else
+          URL="https://staging-api.bil.com"
+        fi
+        
+        # Test response time
+        RESPONSE_TIME=$(curl -o /dev/null -s -w "%{time_total}" "$URL/health")
+        
+        # Convert to milliseconds
+        RESPONSE_TIME_MS=$(echo "$RESPONSE_TIME * 1000" | bc)
+        
+        echo "response_time=$RESPONSE_TIME_MS" >> $GITHUB_OUTPUT
+        
+        # Alert if response time > 2 seconds
+        if (( $(echo "$RESPONSE_TIME > 2.0" | bc -l) )); then
+          echo "status=slow" >> $GITHUB_OUTPUT
+        else
+          echo "status=ok" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Alert on Slow Response
+      if: steps.perf.outputs.status == 'slow'
+      uses: 8398a7/action-slack@v3
+      with:
+        status: warning
+        channel: '#alerts'
+        webhook_url: ${{ env.SLACK_WEBHOOK }}
+        custom_payload: |
+          {
+            "text": "⚠️ Slow Response Time Detected",
+            "attachments": [
+              {
+                "color": "warning",
+                "fields": [
+                  {
+                    "title": "Environment",
+                    "value": "${{ matrix.environment }}",
+                    "short": true
+                  },
+                  {
+                    "title": "Response Time",
+                    "value": "${{ steps.perf.outputs.response_time }}ms",
+                    "short": true
+                  },
+                  {
+                    "title": "Threshold",
+                    "value": "2000ms",
+                    "short": true
+                  }
+                ]
+              }
+            ]
+          }
+
+  # SSL Certificate Monitoring
+  ssl-check:
+    name: SSL Certificate Check
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        domain: [api.bil.com, staging-api.bil.com]
+    
+    steps:
+    - name: Check SSL Certificate
+      id: ssl
+      run: |
+        # Get certificate expiry date
+        EXPIRY=$(echo | openssl s_client -servername ${{ matrix.domain }} -connect ${{ matrix.domain }}:443 2>/dev/null | openssl x509 -noout -dates | grep notAfter | cut -d= -f2)
+        
+        # Convert to epoch time
+        EXPIRY_EPOCH=$(date -d "$EXPIRY" +%s)
+        CURRENT_EPOCH=$(date +%s)
+        
+        # Calculate days until expiry
+        DAYS_UNTIL_EXPIRY=$(( (EXPIRY_EPOCH - CURRENT_EPOCH) / 86400 ))
+        
+        echo "days_until_expiry=$DAYS_UNTIL_EXPIRY" >> $GITHUB_OUTPUT
+        echo "expiry_date=$EXPIRY" >> $GITHUB_OUTPUT
+        
+        # Alert if certificate expires within 30 days
+        if [ $DAYS_UNTIL_EXPIRY -lt 30 ]; then
+          echo "status=expiring" >> $GITHUB_OUTPUT
+        else
+          echo "status=ok" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Alert on Certificate Expiry
+      if: steps.ssl.outputs.status == 'expiring'
+      uses: 8398a7/action-slack@v3
+      with:
+        status: warning
+        channel: '#alerts'
+        webhook_url: ${{ env.SLACK_WEBHOOK }}
+        custom_payload: |
+          {
+            "text": "🔒 SSL Certificate Expiring Soon",
+            "attachments": [
+              {
+                "color": "warning",
+                "fields": [
+                  {
+                    "title": "Domain",
+                    "value": "${{ matrix.domain }}",
+                    "short": true
+                  },
+                  {
+                    "title": "Days Until Expiry",
+                    "value": "${{ steps.ssl.outputs.days_until_expiry }}",
+                    "short": true
+                  },
+                  {
+                    "title": "Expiry Date",
+                    "value": "${{ steps.ssl.outputs.expiry_date }}",
+                    "short": false
+                  }
+                ]
+              }
+            ]
+          }
+
+  # Dependency Updates
+  dependency-check:
+    name: Dependency Security Check
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+
+    - name: Check for security vulnerabilities
+      id: audit
+      run: |
+        # Run npm audit and capture output
+        if npm audit --audit-level=high --json > audit-results.json; then
+          echo "status=clean" >> $GITHUB_OUTPUT
+        else
+          echo "status=vulnerabilities" >> $GITHUB_OUTPUT
+          VULN_COUNT=$(cat audit-results.json | jq '.metadata.vulnerabilities.high + .metadata.vulnerabilities.critical')
+          echo "vulnerability_count=$VULN_COUNT" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Alert on Vulnerabilities
+      if: steps.audit.outputs.status == 'vulnerabilities'
+      uses: 8398a7/action-slack@v3
+      with:
+        status: warning
+        channel: '#security'
+        webhook_url: ${{ env.SLACK_WEBHOOK }}
+        custom_payload: |
+          {
+            "text": "🔐 Security Vulnerabilities Detected",
+            "attachments": [
+              {
+                "color": "warning",
+                "fields": [
+                  {
+                    "title": "High/Critical Vulnerabilities",
+                    "value": "${{ steps.audit.outputs.vulnerability_count }}",
+                    "short": true
+                  },
+                  {
+                    "title": "Action Required",
+                    "value": "Run `npm audit fix` to resolve",
+                    "short": false
+                  }
+                ]
+              }
+            ]
+          }
